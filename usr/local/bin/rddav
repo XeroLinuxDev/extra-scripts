@@ -1,92 +1,186 @@
 #!/bin/bash
-# Setup Real-Debrid WebDAV auto-mount using davfs2 on Arch
-# Prompts for credentials → inserts at line 55 with exact spacing
+# ---------------------------------------------------------
+#  Real-Debrid WebDAV Automount Installer (Arch Linux)
+# ---------------------------------------------------------
+#  - Prompts for credentials
+#  - Writes aligned entry to /etc/davfs2/secrets (line 55)
+#  - Configures davfs2 (use_locks=0)
+#  - Creates systemd .mount + .automount units
+#  - Enables automatic on-demand mounting
+# ---------------------------------------------------------
 
 MOUNT_POINT="/mnt/RealDebrid"
 SECRETS="/etc/davfs2/secrets"
 CONF="/etc/davfs2/davfs2.conf"
+CURRENT_USER="${SUDO_USER:-$USER}"
 
-# -----------------------------
-#   CREDENTIAL PROMPTS
-# -----------------------------
-echo
-read -p "Enter your Real-Debrid username: " RDUSER
-echo
-read -s -p "Enter your Real-Debrid password/secret: " RDSECRET
+clear
+echo "========================================================="
+echo "     Real-Debrid WebDAV Automount Setup (Arch Linux)"
+echo "========================================================="
 echo
 
-# <<< EXACT SPACING STRUCTURE >>>
-# URL + 4 spaces + USERNAME + 6 spaces + PASSWORD
+# ---------------------------------------------------------
+#  STEP 1: Ask user for credentials
+# ---------------------------------------------------------
+echo "[ STEP 1 ]  Enter your Real-Debrid credentials"
+echo
+
+read -p "Username: " RDUSER
+read -s -p "Password/Secret: " RDSECRET
+echo
+echo
+
+# Spaced format: URL + 4 spaces + USERNAME + 6 spaces + PASSWORD
 ENTRY="https://dav.real-debrid.com/    ${RDUSER}      ${RDSECRET}"
 
-CURRENT_USER="${SUDO_USER:-$USER}"
+# ---------------------------------------------------------
+#  STEP 2: Install davfs2 package
+# ---------------------------------------------------------
+echo "[ STEP 2 ]  Installing davfs2 package..."
 echo
-echo "[*] Installing davfs2..."
 sudo pacman -S --noconfirm davfs2
 echo
-echo "[*] Ensuring group 'davfs2' exists..."
+
+# ---------------------------------------------------------
+#  STEP 3: Ensure davfs2 group exists and add user
+# ---------------------------------------------------------
+echo "[ STEP 3 ]  Preparing davfs2 permissions..."
+echo
+
 if ! getent group davfs2 >/dev/null; then
     sudo groupadd davfs2
+    echo "Created group: davfs2"
+else
+    echo "Group already exists: davfs2"
 fi
 
 sudo gpasswd -a "$CURRENT_USER" davfs2
 echo
-echo "[*] Creating mount point: $MOUNT_POINT"
-sudo mkdir -p "$MOUNT_POINT"
+
+# ---------------------------------------------------------
+#  STEP 4: Create mount point
+# ---------------------------------------------------------
+echo "[ STEP 4 ]  Creating WebDAV mount directory..."
 echo
-echo "[*] Preparing $SECRETS"
+sudo mkdir -p "$MOUNT_POINT"
+echo "Mount point: $MOUNT_POINT"
+echo
+
+# ---------------------------------------------------------
+#  STEP 5: Configure secrets file
+# ---------------------------------------------------------
+echo "[ STEP 5 ]  Updating /etc/davfs2/secrets..."
+echo
+
 sudo touch "$SECRETS"
 sudo chmod 600 "$SECRETS"
-echo
-echo "[*] Cleaning any previous Real-Debrid entries..."
+
+# Remove old credentials
 sudo sed -i '\|https://dav.real-debrid.com/|d' "$SECRETS"
-echo
-echo "[*] Inserting your Real-Debrid credentials..."
 
-# Insert entry on line 55
+# Insert new entry on line 55 + blank line on 56
 sudo sed -i "55i\\$ENTRY" "$SECRETS"
-
-# Insert blank line on line 56
 sudo sed -i "56i\\" "$SECRETS"
+
+echo "Credentials inserted at line 55."
 echo
-echo "[*] Updating davfs2.conf (use_locks = 0)"
+
+# ---------------------------------------------------------
+#  STEP 6: Configure davfs2 options
+# ---------------------------------------------------------
+echo "[ STEP 6 ]  Patching davfs2 configuration..."
+echo
+
 sudo sed -i 's/^#\?\s*use_locks\s\+1/use_locks       0/' "$CONF"
+
 if ! grep -q "^use_locks" "$CONF"; then
     echo "use_locks       0" | sudo tee -a "$CONF" >/dev/null
 fi
-echo
-echo "[*] Adding fstab entry..."
-FSTAB_ENTRY="https://dav.real-debrid.com/  $MOUNT_POINT  davfs  _netdev,auto,user,rw  0  0"
 
-if ! grep -q "https://dav.real-debrid.com/" /etc/fstab; then
-    echo "$FSTAB_ENTRY" | sudo tee -a /etc/fstab >/dev/null
-    echo "    -> Reloading systemd daemon..."
-    sudo systemctl daemon-reload
-else
-    echo "    -> fstab entry already exists."
-    echo "    -> Reloading systemd daemon anyway..."
-    sudo systemctl daemon-reload
-fi
-
+echo "use_locks set to 0."
 echo
-read -p "Would you like to mount the Real-Debrid WebDAV share now? (y/n): " ANSWER
+
+# ---------------------------------------------------------
+#  STEP 7: Create systemd mount unit
+# ---------------------------------------------------------
+echo "[ STEP 7 ]  Creating systemd mount unit..."
+echo
+
+sudo tee /etc/systemd/system/mnt-RealDebrid.mount >/dev/null <<EOF
+[Unit]
+Description=Real-Debrid WebDAV Mount
+After=network-online.target
+Wants=network-online.target
+
+[Mount]
+What=https://dav.real-debrid.com/
+Where=$MOUNT_POINT
+Type=davfs
+Options=_netdev,user,rw
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo "mnt-RealDebrid.mount created."
+echo
+
+# ---------------------------------------------------------
+#  STEP 8: Create systemd automount unit
+# ---------------------------------------------------------
+echo "[ STEP 8 ]  Creating systemd automount unit..."
+echo
+
+sudo tee /etc/systemd/system/mnt-RealDebrid.automount >/dev/null <<EOF
+[Unit]
+Description=Automount Real-Debrid WebDAV
+
+[Automount]
+Where=$MOUNT_POINT
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo "mnt-RealDebrid.automount created."
+echo
+
+# ---------------------------------------------------------
+#  STEP 9: Reload systemd + enable automount
+# ---------------------------------------------------------
+echo "[ STEP 9 ]  Enabling systemd automount..."
+echo
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now mnt-RealDebrid.automount
+
+echo "Automount enabled."
+echo
+
+# ---------------------------------------------------------
+#  STEP 10: Ask user if they want to mount now
+# ---------------------------------------------------------
+echo "[ FINAL STEP ]  Immediate mounting option"
+echo
+
+read -p "Mount now? (y/n): " ANSWER
 
 case "$ANSWER" in
     y|Y|yes|YES)
-        echo "[*] Mounting now..."
-        sudo mount -a
-        echo "[✓] Mount complete. You can access it at: $MOUNT_POINT"
-        ;;
-    n|N|no|NO)
-        echo "[!] The mount will NOT be usable until you reboot or run:"
-        echo "    sudo mount -a"
+        echo
+        echo "Triggering mount..."
+        ls "$MOUNT_POINT" >/dev/null 2>&1
+        echo "Mounted at: $MOUNT_POINT"
         ;;
     *)
-        echo "[!] Invalid choice. Not mounting."
-        echo "    Run manually: sudo mount -a"
+        echo
+        echo "Will mount automatically on first access or after reboot."
         ;;
 esac
 
 echo
-echo "[✓] All done!"
+echo "========================================================="
+echo " Installation complete! Your WebDAV share is ready."
+echo "========================================================="
 echo
