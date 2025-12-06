@@ -1,5 +1,5 @@
 # Maintainer: DarkXero <info@techxero.com>
-pkgname=xero-fix-scripts
+pkgname=extra-scripts
 _destname1="/"
 pkgver=2.4
 pkgrel=1
@@ -10,6 +10,7 @@ license=('GPL3')
 makedepends=('git')
 conflicts=('xero-fix-tools-dev')
 provides=("${pkgname}")
+replaces=("xero-fix-scripts")
 options=(!strip !emptydirs)
 source=(${pkgname}::"git+${url}/${pkgname}")
 sha256sums=('SKIP')
