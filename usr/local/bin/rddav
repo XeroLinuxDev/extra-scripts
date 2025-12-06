@@ -1,0 +1,92 @@
+#!/bin/bash
+# Setup Real-Debrid WebDAV auto-mount using davfs2 on Arch
+# Prompts for credentials → inserts at line 55 with exact spacing
+
+MOUNT_POINT="/mnt/RealDebrid"
+SECRETS="/etc/davfs2/secrets"
+CONF="/etc/davfs2/davfs2.conf"
+
+# -----------------------------
+#   CREDENTIAL PROMPTS
+# -----------------------------
+echo
+read -p "Enter your Real-Debrid username: " RDUSER
+echo
+read -s -p "Enter your Real-Debrid password/secret: " RDSECRET
+echo
+
+# <<< EXACT SPACING STRUCTURE >>>
+# URL + 4 spaces + USERNAME + 6 spaces + PASSWORD
+ENTRY="https://dav.real-debrid.com/    ${RDUSER}      ${RDSECRET}"
+
+CURRENT_USER="${SUDO_USER:-$USER}"
+echo
+echo "[*] Installing davfs2..."
+sudo pacman -S --noconfirm davfs2
+echo
+echo "[*] Ensuring group 'davfs2' exists..."
+if ! getent group davfs2 >/dev/null; then
+    sudo groupadd davfs2
+fi
+
+sudo gpasswd -a "$CURRENT_USER" davfs2
+echo
+echo "[*] Creating mount point: $MOUNT_POINT"
+sudo mkdir -p "$MOUNT_POINT"
+echo
+echo "[*] Preparing $SECRETS"
+sudo touch "$SECRETS"
+sudo chmod 600 "$SECRETS"
+echo
+echo "[*] Cleaning any previous Real-Debrid entries..."
+sudo sed -i '\|https://dav.real-debrid.com/|d' "$SECRETS"
+echo
+echo "[*] Inserting your Real-Debrid credentials..."
+
+# Insert entry on line 55
+sudo sed -i "55i\\$ENTRY" "$SECRETS"
+
+# Insert blank line on line 56
+sudo sed -i "56i\\" "$SECRETS"
+echo
+echo "[*] Updating davfs2.conf (use_locks = 0)"
+sudo sed -i 's/^#\?\s*use_locks\s\+1/use_locks       0/' "$CONF"
+if ! grep -q "^use_locks" "$CONF"; then
+    echo "use_locks       0" | sudo tee -a "$CONF" >/dev/null
+fi
+echo
+echo "[*] Adding fstab entry..."
+FSTAB_ENTRY="https://dav.real-debrid.com/  $MOUNT_POINT  davfs  _netdev,auto,user,rw  0  0"
+
+if ! grep -q "https://dav.real-debrid.com/" /etc/fstab; then
+    echo "$FSTAB_ENTRY" | sudo tee -a /etc/fstab >/dev/null
+    echo "    -> Reloading systemd daemon..."
+    sudo systemctl daemon-reload
+else
+    echo "    -> fstab entry already exists."
+    echo "    -> Reloading systemd daemon anyway..."
+    sudo systemctl daemon-reload
+fi
+
+echo
+read -p "Would you like to mount the Real-Debrid WebDAV share now? (y/n): " ANSWER
+
+case "$ANSWER" in
+    y|Y|yes|YES)
+        echo "[*] Mounting now..."
+        sudo mount -a
+        echo "[✓] Mount complete. You can access it at: $MOUNT_POINT"
+        ;;
+    n|N|no|NO)
+        echo "[!] The mount will NOT be usable until you reboot or run:"
+        echo "    sudo mount -a"
+        ;;
+    *)
+        echo "[!] Invalid choice. Not mounting."
+        echo "    Run manually: sudo mount -a"
+        ;;
+esac
+
+echo
+echo "[✓] All done!"
+echo
