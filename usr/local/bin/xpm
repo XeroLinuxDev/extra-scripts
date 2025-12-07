@@ -148,31 +148,27 @@ fix_mkinitcpio_hooks() {
 # ==========================================================
 append_kernel_flags() {
     local file="/etc/default/grub"
-    local flags=("splash" "rd.udev.log_priority=3" "vt.global_cursor_default=0")
+    local add="splash rd.udev.log_priority=3 vt.global_cursor_default=0"
 
-    local line
-    line=$(grep '^GRUB_CMDLINE_LINUX_DEFAULT=' "$file" || true)
-    [[ -z "$line" ]] && error "GRUB_CMDLINE_LINUX_DEFAULT not found"
+    # Extract exact existing content inside quotes
+    local current
+    current=$(grep -E '^GRUB_CMDLINE_LINUX_DEFAULT=' "$file" | sed 's/^[^"]*"\(.*\)".*/\1/')
 
-    local current="${line#GRUB_CMDLINE_LINUX_DEFAULT=\"}"
-    current="${current%\"}"
+    # If grep failed, abort cleanly
+    [[ -z "${current+x}" ]] && error "Could not find GRUB_CMDLINE_LINUX_DEFAULT in $file"
 
-    local new="$current"
+    # Append our required flags (always append, never remove)
+    local new="$current $add"
 
-    for f in "${flags[@]}"; do
-        if [[ ! " $new " =~ " $f " ]]; then
-            new="$new $f"
-        fi
-    done
+    info "Appending kernel flags to GRUB…"
 
-    new=$(echo "$new" | xargs)
-
+    # Replace ONLY the inside of the quotes — nothing else touched
     sudo sed -i \
-        "s|^GRUB_CMDLINE_LINUX_DEFAULT=\".*\"|GRUB_CMDLINE_LINUX_DEFAULT=\"$new\"|" \
+        "s|^\(GRUB_CMDLINE_LINUX_DEFAULT=\"\).*\"|\1$new\"|" \
         "$file"
 
-    ok "GRUB updated:"
-    echo "    $new"
+    ok "Updated GRUB_CMDLINE_LINUX_DEFAULT="
+    echo "    \"$new\""
 }
 
 # ==========================================================
