@@ -38,13 +38,17 @@ error()  { printf "${RED}✖ %s${RESET}\n" "$1"; exit 1; }
 BACKUP_DIR="/etc/plymouth-backups"
 TIME_STAMP="$(date +%Y%m%d_%H%M%S)"
 
-sudo mkdir -p "$BACKUP_DIR" 2>/dev/null || true
-
 # ==========================================================
 # BACKUP BOTH CONFIG FILES
 # ==========================================================
 backup_configs() {
     section "BACKUP — Saving Current Boot Configs"
+
+    # ensure backup directory exists
+    if [[ ! -d "$BACKUP_DIR" ]]; then
+        info "Creating backup directory: $BACKUP_DIR"
+        sudo mkdir -p "$BACKUP_DIR"
+    fi
 
     local mk_src="/etc/mkinitcpio.conf"
     local grub_src="/etc/default/grub"
