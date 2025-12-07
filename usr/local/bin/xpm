@@ -89,30 +89,19 @@ print_indexed_columns() {
 # Append flags to existing GRUB line (NEVER modify anything else)
 # ==========================================================
 append_kernel_flags() {
-    local file="/etc/default/grub"
-    local add="splash rd.udev.log_priority=3 vt.global_cursor_default=0"
-
-    local current
-    current=$(grep -E '^GRUB_CMDLINE_LINUX_DEFAULT=' "$file" | sed 's/^[^"]*"\(.*\)".*/\1/')
-
-    [[ -z "${current+x}" ]] && error "Could not parse GRUB_CMDLINE_LINUX_DEFAULT"
-
-    local new="$current $add"
-
-    info "Appending kernel flags to GRUB…"
-
-    sudo sed -i \
-        "s|^\(GRUB_CMDLINE_LINUX_DEFAULT=\"\).*\"|\1$new\"|" \
-        "$file"
-
-    ok "GRUB updated successfully."
-    printf "${CYAN}Final value:\n\"$new\"\n\n${RESET}"
+    echo
+    info "Appending kernel flags to GRUB..."
+    sudo sed -i 's/^\(GRUB_CMDLINE_LINUX_DEFAULT="[^"]*\)"/\1 splash rd.udev.log_priority=3 vt.global_cursor_default=0"/' /etc/default/grub
+    echo
+    ok "GRUB updated."
 }
+
 
 # ==========================================================
 # Backup configurations
 # ==========================================================
 backup_configs() {
+    echo
     info "Creating backups of mkinitcpio.conf and grub…"
 
     sudo mkdir -p "$BACKUP_DIR"
@@ -126,6 +115,7 @@ backup_configs() {
 # Fix mkinitcpio HOOKS
 # ==========================================================
 fix_mkinitcpio_hooks() {
+    echo
     info "Updating mkinitcpio HOOKS…"
 
     local file="/etc/mkinitcpio.conf"
@@ -229,9 +219,11 @@ install_plymouth_step() {
     sudo pacman -Sy --needed --noconfirm plymouth plymouth-kcm
 
     info "Fixing mkinitcpio HOOKS…"
+    echo
     fix_mkinitcpio_hooks
 
     info "Appending kernel flags to GRUB…"
+    echo
     append_kernel_flags
 
     info "Rebuilding mkinitcpio…"
