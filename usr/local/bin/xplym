@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# ==========================================================
+#   Arch Linux Plymouth Wizard (Decorative + Centered Titles)
+#   Install → Theme → Restore → Exit
+# ==========================================================
+
+set -euo pipefail && clear
+
+# =========================[ COLORS ]========================
+RESET="\e[0m"
+RED="\e[31m"
+GREEN="\e[32m"
+YELLOW="\e[33m"
+BLUE="\e[34m"
+MAGENTA="\e[35m"
+CYAN="\e[36m"
+BOLD="\e[1m"
+
+# =====================[ Centered Section Header ]=====================
+section() {
+    local text="$1"
+    local width=47          # Width of the decorative box
+    local padding=$(( (width - ${#text}) / 2 ))
+    local pad=""
+    printf -v pad "%*s" "$padding"
+
+    printf "\n${MAGENTA}${BOLD}───────────────────────────────────────────────\n"
+    printf "%s%s%s\n" "$pad" "$text" "$pad"
+    printf "───────────────────────────────────────────────${RESET}\n"
+}
+
+# =========================[ HELPERS ]========================
+info()   { printf "${CYAN}➜ %s${RESET}\n" "$1"; }
+ok()     { printf "${GREEN}✔ %s${RESET}\n" "$1"; }
+warn()   { printf "${YELLOW}⚠ %s${RESET}\n" "$1"; }
+error()  { printf "${RED}✖ %s${RESET}\n" "$1"; exit 1; }
+
+BACKUP_DIR="/etc/plymouth-backups"
+sudo mkdir -p "$BACKUP_DIR" 2>/dev/null || true
+
+# =========================[ 1. INSTALL PLYMOUTH ]========================
+
+install_plymouth_step() {
+    section "STEP 1 — Install & Activate Plymouth"
+
+    info "Installing plymouth and plymouth-kcm…"
+    sudo pacman -Sy --needed --noconfirm plymouth plymouth-kcm \
+        || error "Failed installing Plymouth packages."
+    ok "Plymouth installed."
+
+    info "Backing up configs into $BACKUP_DIR"
+    sudo cp /etc/mkinitcpio.conf "$BACKUP_DIR/mkinitcpio.conf.bak" 2>/dev/null || true
+    sudo cp /etc/default/grub "$BACKUP_DIR/grub.bak" 2>/dev/null || true
+
+    HOOKS=$(grep "^HOOKS=" /etc/mkinitcpio.conf)
+    if [[ "$HOOKS" != *plymouth* ]]; then
+        info "Adding 'plymouth' hook before 'filesystems'…"
+        sudo sed -i 's/filesystems/plymouth &/' /etc/mkinitcpio.conf
+    else
+        warn "Plymouth hook already exists."
+    fi
+
+    info "Setting GRUB kernel args → quiet splash"
+    sudo sed -i \
+        -e 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' \
+        -e 's/systemd.show_status=[a-zA-Z]*//g' \
+        /etc/default/grub
+
+    info "Rebuilding initramfs…"
+    sudo mkinitcpio -P
+
+    info "Regenerating GRUB config…"
+    sudo grub-mkconfig -o /boot/grub/grub.cfg
+
+    ok "Plymouth installed and activated."
+}
+
+# =========================[ 2. THEME SELECT ]========================
+
+theme_selection_step() {
+    section "STEP 2 — Plymouth Theme Selection"
+
+    mapfile -t THEMES < <(pacman -Ss plymouth-theme | awk '{print $1}' | cut -d'/' -f2)
+
+    [[ ${#THEMES[@]} -gt 0 ]] || error "No Plymouth theme packages found."
+
+    printf "${BOLD}Available Themes:${RESET}\n"
+    for i in "${!THEMES[@]}"; do
+        printf "${BLUE} [%d]${RESET} %s\n" "$i" "${THEMES[$i]}"
+    done
+
+    printf "\n${YELLOW}Pick theme number:${RESET} "
+    read -r CHOICE
+
+    if ! [[ "$CHOICE" =~ ^[0-9]+$ ]] || (( CHOICE < 0 || CHOICE >= ${#THEMES[@]} )); then
+        error "Invalid selection."
+    fi
+
+    THEME_PKG="${THEMES[$CHOICE]}"
+    info "Installing theme: $THEME_PKG"
+    sudo pacman -Sy --needed --noconfirm "$THEME_PKG"
+
+    THEME_NAME=$(plymouth-set-default-theme --list \
+        | grep -i "$(echo "$THEME_PKG" | sed 's/plymouth-theme-//')" || true)
+    [[ -n "$THEME_NAME" ]] || THEME_NAME="${THEME_PKG/plymouth-theme-/}"
+
+    info "Activating theme: $THEME_NAME"
+    sudo plymouth-set-default-theme -R "$THEME_NAME"
+
+    ok "Theme applied."
+}
+
+# =========================[ 3. RESTORE / RECOVER ]========================
+
+restore_step() {
+    section "STEP 3 — Restore Pre-Plymouth Settings"
+
+    if [[ ! -f "$BACKUP_DIR/mkinitcpio.conf.bak" ]] || [[ ! -f "$BACKUP_DIR/grub.bak" ]]; then
+        error "No backups found! Cannot restore."
+    fi
+
+    warn "Restoring original mkinitcpio.conf"
+    sudo cp "$BACKUP_DIR/mkinitcpio.conf.bak" /etc/mkinitcpio.conf
+
+    warn "Restoring original GRUB config"
+    sudo cp "$BACKUP_DIR/grub.bak" /etc/default/grub
+
+    info "Removing Plymouth packages (optional)…"
+    sudo pacman -Rns --noconfirm plymouth plymouth-kcm 2>/dev/null || warn "Plymouth was already removed."
+
+    info "Rebuilding initramfs…"
+    sudo mkinitcpio -P
+
+    info "Regenerating GRUB…"
+    sudo grub-mkconfig -o /boot/grub/grub.cfg
+
+    ok "Restoration complete. System is back to pre-Plymouth state."
+}
+
+# =========================[ MENU ]========================
+
+while true; do
+    section "Plymouth Wizard – Main Menu"
+
+    printf "${BOLD}${CYAN}Choose an action:${RESET}\n\n"
+    printf "${GREEN} 1)${RESET} Install & Activate Plymouth.\n"
+    printf "${GREEN} 2)${RESET} Select a Theme to Set up (Selection).\n"
+    printf "${GREEN} 3)${RESET} Restore & Deactivate Plymouth (Recovery).\n"
+    echo
+    printf "${RED} 4)${RESET} Exit & Cancel\n\n"
+
+    printf "${YELLOW}Enter choice:${RESET} "
+    read -r MENU_CHOICE
+
+    case "$MENU_CHOICE" in
+        1) install_plymouth_step ;;
+        2) theme_selection_step ;;
+        3) restore_step ;;
+        4)
+        echo
+        info "Exiting. Goodbye!"
+        exit 0
+        ;;
+        *)
+        echo        # ← empty line
+        warn "Invalid option. Try again."
+        ;;
+
+    esac
+done
