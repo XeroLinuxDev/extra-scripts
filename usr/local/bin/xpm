@@ -241,7 +241,7 @@ theme_install_step() {
 
     get_theme_pkg_list
 
-    printf "${BOLD}Available Theme Packages:${RESET}\n\n"
+    printf "${BOLD}Available Plymouth Themes :${RESET}\n\n"
     print_indexed_columns THEMES_NAMES
 
     printf "${YELLOW}Choose package (number) or 'm' to return:${RESET} "
@@ -292,8 +292,8 @@ theme_management_menu() {
         clear
         section "THEME MANAGEMENT"
 
-        printf "${GREEN}   a)${RESET} Install New Theme Package\n"
-        printf "${GREEN}   b)${RESET} Apply / Change Installed Theme\n\n"
+        printf "${GREEN}   a)${RESET} Install a New Plymouth Theme.\n"
+        printf "${GREEN}   b)${RESET} Apply/Change Current Plymouth Theme.\n\n"
         printf "${RED}   m)${RESET} Back to Main Menu\n\n"
 
         printf "${YELLOW}Choose option:${RESET} "
