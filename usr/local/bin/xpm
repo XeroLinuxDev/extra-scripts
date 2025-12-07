@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==========================================================
-#   Arch Linux Plymouth Wizard – Humanized + Submenu Edition
+#   Arch Linux Plymouth Wizard – XeroLinux Edition
 # ==========================================================
 
 set -euo pipefail && clear
@@ -10,7 +10,6 @@ RESET="\e[0m"
 RED="\e[31m"
 GREEN="\e[32m"
 YELLOW="\e[33m"
-BLUE="\e[34m"
 MAGENTA="\e[35m"
 CYAN="\e[36m"
 BOLD="\e[1m"
@@ -20,9 +19,10 @@ section() {
     local text="$1"
     local width=47
     local padding=$(( (width - ${#text}) / 2 ))
+
     printf "\n${MAGENTA}${BOLD}───────────────────────────────────────────────\n"
     printf "%*s%s%*s\n" "$padding" "" "$text" "$padding" ""
-    printf "───────────────────────────────────────────────${RESET}\n"
+    printf "───────────────────────────────────────────────${RESET}\n\n"
 }
 
 # =========================[ HELPERS ]========================
@@ -35,7 +35,7 @@ BACKUP_DIR="/etc/plymouth-backups"
 TIME_STAMP="$(date +%Y%m%d_%H%M%S)"
 
 # ==========================================================
-# Humanize package names (plymouth-theme-arch-charge-git → Arch Charge)
+# Humanize package names: plymouth-theme-arch-charge-git → Arch Charge
 # ==========================================================
 humanize_pkg_name() {
     local pkg="$1"
@@ -52,15 +52,14 @@ humanize_pkg_name() {
 }
 
 # ==========================================================
-# Multi-column padded printer
+# Multi-column padded printer (auto columns)
 # ==========================================================
 print_indexed_columns() {
     local -n labels_ref=$1
     local count=${#labels_ref[@]}
     (( count == 0 )) && return
 
-    local cols
-    cols=$(tput cols 2>/dev/null || echo 80)
+    local cols=$(tput cols 2>/dev/null || echo 80)
 
     local max_len=0
     for label in "${labels_ref[@]}"; do
@@ -82,6 +81,7 @@ print_indexed_columns() {
             printf "\n"
         fi
     done
+
     printf "\n"
 }
 
@@ -97,6 +97,9 @@ backup_configs() {
     sudo cp /etc/default/grub "$BACKUP_DIR/grub.bak_$TIME_STAMP"
 
     ok "Backup created."
+
+    printf "\n${YELLOW}Press Enter to continue...${RESET}"
+    read -r
 }
 
 # ==========================================================
@@ -141,7 +144,7 @@ fix_mkinitcpio_hooks() {
 }
 
 # ==========================================================
-# Append only the required GRUB flags
+# Append kernel flags to GRUB safely
 # ==========================================================
 append_kernel_flags() {
     local file="/etc/default/grub"
@@ -168,12 +171,12 @@ append_kernel_flags() {
         "s|^GRUB_CMDLINE_LINUX_DEFAULT=\".*\"|GRUB_CMDLINE_LINUX_DEFAULT=\"$new\"|" \
         "$file"
 
-    ok "Updated GRUB_CMDLINE_LINUX_DEFAULT:"
+    ok "GRUB updated:"
     echo "    $new"
 }
 
 # ==========================================================
-# Get theme packages (humanized names)
+# Get available theme packages
 # ==========================================================
 get_theme_pkg_list() {
     THEMES_PKGS=()
@@ -185,12 +188,11 @@ get_theme_pkg_list() {
 
         THEMES_PKGS+=("$pkg")
         THEMES_NAMES+=("$(humanize_pkg_name "$pkg")")
-
     done < <(pacman -Ss plymouth-theme 2>/dev/null | awk '/^[^/]+\/plymouth-theme/ {print $1}')
 }
 
 # ==========================================================
-# Detect installed themes (.plymouth)
+# Select theme from installed .plymouth files
 # ==========================================================
 select_theme_from_fs() {
     local plyfiles=()
@@ -211,11 +213,13 @@ select_theme_from_fs() {
         THEME_TITLES+=("$name")
     done
 
-    printf "${BOLD}Installed Themes:${RESET}\n"
+    printf "${BOLD}Installed Themes:${RESET}\n\n"
     print_indexed_columns THEME_TITLES
 
-    printf "${YELLOW}Choose theme to activate:${RESET} "
+    printf "${YELLOW}Choose theme (number) or 'm' to return:${RESET} "
     read -r idx
+
+    [[ "$idx" == "m" || "$idx" == "M" ]] && return 1
 
     if ! [[ "$idx" =~ ^[0-9]+$ ]] || (( idx < 0 || idx >= ${#THEME_IDS[@]} )); then
         error "Invalid selection."
@@ -228,6 +232,7 @@ select_theme_from_fs() {
 # Install & activate Plymouth
 # ==========================================================
 install_plymouth_step() {
+    clear
     section "STEP 1 — Install & Activate Plymouth"
 
     backup_configs
@@ -238,29 +243,34 @@ install_plymouth_step() {
 
     printf "${YELLOW}Append splash/udev/cursor flags to GRUB? [Y/n]: ${RESET}"
     read -r yn
-    [[ -z "${yn:-}" || "$yn" =~ ^[Yy]$ ]] && append_kernel_flags
+    [[ -z "$yn" || "$yn" =~ ^[Yy]$ ]] && append_kernel_flags
 
     sudo mkinitcpio -P
     sudo grub-mkconfig -o /boot/grub/grub.cfg
 
-    ok "Plymouth installed. Reboot to see it."
+    ok "Plymouth installed successfully."
+
+    printf "\n${YELLOW}Press Enter to return to Main Menu...${RESET}"
+    read -r
 }
 
 # ==========================================================
-# THEME MANAGEMENT — Install theme package
+# Install a theme package
 # ==========================================================
 theme_install_step() {
+    clear
     section "THEMES — Install New Theme Package"
-    echo
+
     get_theme_pkg_list
     (( ${#THEMES_PKGS[@]} == 0 )) && error "No theme packages found."
-    echo
-    printf "${BOLD}Available Theme Packages:${RESET}\n"
-    echo
+
+    printf "${BOLD}Available Theme Packages:${RESET}\n\n"
     print_indexed_columns THEMES_NAMES
 
-    printf "${YELLOW}Choose package to install:${RESET} "
+    printf "${YELLOW}Choose package (number) or 'm' to return:${RESET} "
     read -r idx
+
+    [[ "$idx" == "m" || "$idx" == "M" ]] && return
 
     if ! [[ "$idx" =~ ^[0-9]+$ ]] || (( idx < 0 || idx >= ${#THEMES_PKGS[@]} )); then
         error "Invalid selection."
@@ -270,50 +280,60 @@ theme_install_step() {
 
     sudo pacman -Sy --needed --noconfirm "$pkg"
 
-    ok "Package '$pkg' installed."
+    ok "Theme package '$pkg' installed."
+
+    printf "\n${YELLOW}Press Enter to return to Theme Management...${RESET}"
+    read -r
 }
 
 # ==========================================================
-# THEME MANAGEMENT — Apply installed theme
+# Apply / change installed theme
 # ==========================================================
 theme_apply_step() {
-    section "THEMES — Apply/Change Current Theme"
-    echo
-    select_theme_from_fs
-    echo
+    clear
+    section "THEMES — Apply / Change Current Theme"
+
+    if ! select_theme_from_fs; then
+        return
+    fi
+
     sudo plymouth-set-default-theme -R "$THEME_NAME"
 
     ok "Theme '$THEME_NAME' applied. Reboot to see it."
+
+    printf "\n${YELLOW}Press Enter to return to Theme Management...${RESET}"
+    read -r
 }
 
 # ==========================================================
-# THEME MANAGEMENT SUBMENU
+# Theme Management submenu
 # ==========================================================
 theme_management_menu() {
     while true; do
-        section "Theme Management"
-        echo
-        printf "${GREEN}   a)${RESET} Install New Theme Package\n"
-        printf "${GREEN}   b)${RESET} Apply / Change Installed Theme\n"
-        echo
-        printf "${RED}   m)${RESET} Back to Main Menu\n\n"
+        clear
+        section "Plymouth Theme Management"
 
-        printf "${YELLOW}Enter choice (a/b/m):${RESET} "
+        printf "${GREEN}   a)${RESET} Install New Theme Package.\n"
+        printf "${GREEN}   b)${RESET} Apply/Change Current Theme.\n\n"
+        printf "${RED}   m)${RESET} Back to Main Menu.\n\n"
+
+        printf "${YELLOW}Choose option:${RESET} "
         read -r opt
 
         case "$opt" in
             a|A) theme_install_step ;;
             b|B) theme_apply_step ;;
-            m|M) clear && return ;;
-            *) warn "Invalid option. Try again." ;;
+            m|M) return ;;
+            *) warn "Invalid selection." ;;
         esac
     done
 }
 
 # ==========================================================
-# Restore system to pre-Plymouth state
+# Restore system
 # ==========================================================
 restore_step() {
+    clear
     section "STEP 3 — Restore System"
 
     local mk gr
@@ -334,21 +354,24 @@ restore_step() {
     sudo grub-mkconfig -o /boot/grub/grub.cfg
 
     ok "System restored."
+
+    printf "\n${YELLOW}Press Enter to return to Main Menu...${RESET}"
+    read -r
 }
 
 # ==========================================================
 # MAIN MENU
 # ==========================================================
 while true; do
+    clear
     section "Plymouth Wizard — Main Menu"
 
-    printf "${GREEN} 1)${RESET} Install & Activate Plymouth\n"
-    printf "${GREEN} 2)${RESET} Theme Management\n"
-    printf "${GREEN} 3)${RESET} Restore System\n"
-    echo
+    printf "${GREEN} 1)${RESET} Install & Activate Plymouth.\n"
+    printf "${GREEN} 2)${RESET} Plymouth Theme Management System.\n"
+    printf "${GREEN} 3)${RESET} Revert System Changes to Pre-Plymouth.\n\n"
     printf "${RED} 4)${RESET} Exit Wizard\n\n"
 
-    printf "${YELLOW}Enter choice:${RESET} "
+    printf "${YELLOW}Choose option:${RESET} "
     read -r choice
 
     case "$choice" in
@@ -356,6 +379,6 @@ while true; do
         2) theme_management_menu ;;
         3) restore_step ;;
         4) info "Goodbye!"; exit 0 ;;
-        *) warn "Invalid option. Try again." ;;
+        *) warn "Invalid selection." ;;
     esac
 done
