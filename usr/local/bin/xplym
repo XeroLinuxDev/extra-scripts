@@ -251,11 +251,12 @@ install_plymouth_step() {
 # ==========================================================
 theme_install_step() {
     section "THEMES — Install New Theme Package"
-
+    echo
     get_theme_pkg_list
     (( ${#THEMES_PKGS[@]} == 0 )) && error "No theme packages found."
-
+    echo
     printf "${BOLD}Available Theme Packages:${RESET}\n"
+    echo
     print_indexed_columns THEMES_NAMES
 
     printf "${YELLOW}Choose package to install:${RESET} "
@@ -276,10 +277,10 @@ theme_install_step() {
 # THEME MANAGEMENT — Apply installed theme
 # ==========================================================
 theme_apply_step() {
-    section "THEMES — Apply / Change Installed Theme"
-
+    section "THEMES — Apply/Change Current Theme"
+    echo
     select_theme_from_fs
-
+    echo
     sudo plymouth-set-default-theme -R "$THEME_NAME"
 
     ok "Theme '$THEME_NAME' applied. Reboot to see it."
@@ -290,8 +291,8 @@ theme_apply_step() {
 # ==========================================================
 theme_management_menu() {
     while true; do
-        section "2) Theme Management"
-
+        section "Theme Management"
+        echo
         printf "${GREEN}   a)${RESET} Install New Theme Package\n"
         printf "${GREEN}   b)${RESET} Apply / Change Installed Theme\n"
         echo
@@ -303,7 +304,7 @@ theme_management_menu() {
         case "$opt" in
             a|A) theme_install_step ;;
             b|B) theme_apply_step ;;
-            m|M) return ;;
+            m|M) clear && return ;;
             *) warn "Invalid option. Try again." ;;
         esac
     done
