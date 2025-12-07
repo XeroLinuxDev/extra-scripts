@@ -78,7 +78,6 @@ print_indexed_columns() {
         (( ${#label} > max_len )) && max_len=${#label}
     done
 
-    # width per column: index + space + label + padding
     local col_width=$((max_len + 8))
     local num_cols=1
 
@@ -91,10 +90,13 @@ print_indexed_columns() {
     for ((i = 0; i < count; i++)); do
         local entry="[$i] ${labels_ref[$i]}"
         printf "%-*s" "$col_width" "$entry"
-        if ((( (i + 1) % num_cols == 0 )); then
+
+        # CORRECTED LINE
+        if ((( (i + 1) % num_cols == 0 ))); then
             printf "\n"
         fi
     done
+
     printf "\n"
 }
 
