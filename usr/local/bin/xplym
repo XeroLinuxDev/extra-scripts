@@ -15,16 +15,13 @@ MAGENTA="\e[35m"
 CYAN="\e[36m"
 BOLD="\e[1m"
 
-# =====================[ Centered Section Header ]=====================
+# =====================[ Section Header ]=====================
 section() {
     local text="$1"
     local width=47
     local padding=$(( (width - ${#text}) / 2 ))
-    local pad=""
-    printf -v pad "%*s" "$padding"
-
     printf "\n${MAGENTA}${BOLD}───────────────────────────────────────────────\n"
-    printf "%s%s%s\n" "$pad" "$text" "$pad"
+    printf "%*s%s%*s\n" "$padding" "" "$text" "$padding" ""
     printf "───────────────────────────────────────────────${RESET}\n"
 }
 
@@ -42,31 +39,23 @@ TIME_STAMP="$(date +%Y%m%d_%H%M%S)"
 # ==========================================================
 humanize_pkg_name() {
     local pkg="$1"
-
-    # Remove prefix and suffix
-    local name="${pkg#plymouth-theme-}"   # remove prefix
-    name="${name%-git}"                   # remove -git if present
-
-    # Replace separators with spaces
+    local name="${pkg#plymouth-theme-}"
+    name="${name%-git}"
     name="${name//-/ }"
     name="${name//_/ }"
 
-    # Capitalize each word
     local final=""
     for word in $name; do
         final+="$(tr '[:lower:]' '[:upper:]' <<< "${word:0:1}")${word:1} "
     done
-
     echo "${final::-1}"
 }
 
 # ==========================================================
-# Generic multi-column printer with padded columns
-# labels array is passed by name (bash 4+)
+# Multi-column padded printer
 # ==========================================================
 print_indexed_columns() {
     local -n labels_ref=$1
-
     local count=${#labels_ref[@]}
     (( count == 0 )) && return
 
@@ -88,28 +77,21 @@ print_indexed_columns() {
     fi
 
     for ((i = 0; i < count; i++)); do
-        local entry="[$i] ${labels_ref[$i]}"
-        printf "%-*s" "$col_width" "$entry"
-
-        # CORRECTED LINE
+        printf "%-*s" "$col_width" "[$i] ${labels_ref[$i]}"
         if ((( (i + 1) % num_cols == 0 ))); then
             printf "\n"
         fi
     done
-
     printf "\n"
 }
 
 # ==========================================================
-# BACKUP BOTH CONFIG FILES
+# Backup configs
 # ==========================================================
 backup_configs() {
     section "BACKUP — Saving System Boot Configs"
 
-    if [[ ! -d "$BACKUP_DIR" ]]; then
-        info "Creating backup directory at $BACKUP_DIR"
-        sudo mkdir -p "$BACKUP_DIR"
-    fi
+    [[ ! -d "$BACKUP_DIR" ]] && sudo mkdir -p "$BACKUP_DIR"
 
     sudo cp /etc/mkinitcpio.conf "$BACKUP_DIR/mkinitcpio.conf.bak_$TIME_STAMP"
     sudo cp /etc/default/grub "$BACKUP_DIR/grub.bak_$TIME_STAMP"
@@ -118,7 +100,7 @@ backup_configs() {
 }
 
 # ==========================================================
-# Insert plymouth HOOK after udev
+# Fix mkinitcpio hooks
 # ==========================================================
 fix_mkinitcpio_hooks() {
     info "Updating mkinitcpio HOOKS…"
@@ -126,7 +108,7 @@ fix_mkinitcpio_hooks() {
     local file="/etc/mkinitcpio.conf"
     local hooks_line
     hooks_line=$(grep "^HOOKS=" "$file" || true)
-    [[ -z "$hooks_line" ]] && error "HOOKS= line not found in $file"
+    [[ -z "$hooks_line" ]] && error "HOOKS= line not found"
 
     local raw="${hooks_line#HOOKS=(}"
     raw="${raw%)}"
@@ -159,7 +141,7 @@ fix_mkinitcpio_hooks() {
 }
 
 # ==========================================================
-# SAFE GRUB FLAG APPENDING (append only, never overwrite)
+# Append only the required GRUB flags
 # ==========================================================
 append_kernel_flags() {
     local file="/etc/default/grub"
@@ -167,7 +149,7 @@ append_kernel_flags() {
 
     local line
     line=$(grep '^GRUB_CMDLINE_LINUX_DEFAULT=' "$file" || true)
-    [[ -z "$line" ]] && error "GRUB_CMDLINE_LINUX_DEFAULT not found in $file"
+    [[ -z "$line" ]] && error "GRUB_CMDLINE_LINUX_DEFAULT not found"
 
     local current="${line#GRUB_CMDLINE_LINUX_DEFAULT=\"}"
     current="${current%\"}"
@@ -182,7 +164,6 @@ append_kernel_flags() {
 
     new=$(echo "$new" | xargs)
 
-    info "Updating GRUB_CMDLINE_LINUX_DEFAULT…"
     sudo sed -i \
         "s|^GRUB_CMDLINE_LINUX_DEFAULT=\".*\"|GRUB_CMDLINE_LINUX_DEFAULT=\"$new\"|" \
         "$file"
@@ -192,47 +173,45 @@ append_kernel_flags() {
 }
 
 # ==========================================================
-# GET PACKAGE LIST (HUMANIZED NAMES)
+# Get theme packages (humanized names)
 # ==========================================================
 get_theme_pkg_list() {
     THEMES_PKGS=()
     THEMES_NAMES=()
 
-    while IFS= read -r pkgref; do
-        local pkg="${pkgref#*/}"       # strip repo/ prefix
-        pkg="${pkg%% *}"               # remove version
-        local readable
-        readable=$(humanize_pkg_name "$pkg")
+    while IFS= read -r ref; do
+        local pkg="${ref#*/}"
+        pkg="${pkg%% *}"
 
         THEMES_PKGS+=("$pkg")
-        THEMES_NAMES+=("$readable")
+        THEMES_NAMES+=("$(humanize_pkg_name "$pkg")")
+
     done < <(pacman -Ss plymouth-theme 2>/dev/null | awk '/^[^/]+\/plymouth-theme/ {print $1}')
 }
 
 # ==========================================================
-# INSTALLED THEMES — REAL DETECTION USING .PLYMOUTH
+# Detect installed themes (.plymouth)
 # ==========================================================
 select_theme_from_fs() {
     local plyfiles=()
     THEME_IDS=()
     THEME_TITLES=()
 
-    mapfile -t plyfiles < <(find /usr/share/plymouth/themes -type f -name '*.plymouth' 2>/dev/null)
+    mapfile -t plyfiles < <(find /usr/share/plymouth/themes -type f -name '*.plymouth')
 
-    (( ${#plyfiles[@]} == 0 )) && error "No installed Plymouth themes found."
+    (( ${#plyfiles[@]} == 0 )) && error "No installed themes found."
 
     for file in "${plyfiles[@]}"; do
         local id name
         id=$(basename "${file%.plymouth}")
         name=$(grep -m1 "^Name=" "$file" | cut -d'=' -f2-)
-
         [[ -z "$name" ]] && name="$id"
 
         THEME_IDS+=("$id")
         THEME_TITLES+=("$name")
     done
 
-    printf "${BOLD}Installed Plymouth Themes:${RESET}\n"
+    printf "${BOLD}Installed Themes:${RESET}\n"
     print_indexed_columns THEME_TITLES
 
     printf "${YELLOW}Choose theme to activate:${RESET} "
@@ -246,44 +225,35 @@ select_theme_from_fs() {
 }
 
 # ==========================================================
-# STEP 1 — INSTALL PLYMOUTH
+# Install & activate Plymouth
 # ==========================================================
 install_plymouth_step() {
     section "STEP 1 — Install & Activate Plymouth"
 
     backup_configs
 
-    info "Installing plymouth & plymouth-kcm…"
     sudo pacman -Sy --needed --noconfirm plymouth plymouth-kcm
 
     fix_mkinitcpio_hooks
 
-    printf "${YELLOW}Append splash / rd.udev.log_priority / vt cursor flags? [Y/n]: ${RESET}"
+    printf "${YELLOW}Append splash/udev/cursor flags to GRUB? [Y/n]: ${RESET}"
     read -r yn
+    [[ -z "${yn:-}" || "$yn" =~ ^[Yy]$ ]] && append_kernel_flags
 
-    if [[ -z "${yn:-}" || "$yn" =~ ^[Yy]$ ]]; then
-        append_kernel_flags
-    else
-        warn "Skipping GRUB_CMDLINE_LINUX_DEFAULT modification."
-    fi
-
-    info "Rebuilding initramfs…"
     sudo mkinitcpio -P
-
-    info "Regenerating GRUB config…"
     sudo grub-mkconfig -o /boot/grub/grub.cfg
 
-    ok "Plymouth installed and activated. Reboot to see it."
+    ok "Plymouth installed. Reboot to see it."
 }
 
 # ==========================================================
-# THEME MANAGEMENT — INSTALL NEW THEME
+# THEME MANAGEMENT — Install theme package
 # ==========================================================
 theme_install_step() {
     section "THEMES — Install New Theme Package"
 
     get_theme_pkg_list
-    (( ${#THEMES_PKGS[@]} == 0 )) && error "No plymouth-theme packages found in repos."
+    (( ${#THEMES_PKGS[@]} == 0 )) && error "No theme packages found."
 
     printf "${BOLD}Available Theme Packages:${RESET}\n"
     print_indexed_columns THEMES_NAMES
@@ -297,22 +267,19 @@ theme_install_step() {
 
     local pkg="${THEMES_PKGS[$idx]}"
 
-    info "Installing package: $pkg"
     sudo pacman -Sy --needed --noconfirm "$pkg"
 
-    ok "Theme package '$pkg' installed. You can now apply it from the Theme Management menu."
+    ok "Package '$pkg' installed."
 }
 
 # ==========================================================
-# THEME MANAGEMENT — APPLY EXISTING THEME
+# THEME MANAGEMENT — Apply installed theme
 # ==========================================================
 theme_apply_step() {
     section "THEMES — Apply / Change Installed Theme"
 
-    info "Scanning installed themes…"
     select_theme_from_fs
 
-    info "Applying theme: $THEME_NAME"
     sudo plymouth-set-default-theme -R "$THEME_NAME"
 
     ok "Theme '$THEME_NAME' applied. Reboot to see it."
@@ -323,13 +290,12 @@ theme_apply_step() {
 # ==========================================================
 theme_management_menu() {
     while true; do
-        section "2) Plymouth Theme Management"
+        section "2) Theme Management"
 
-        printf "${CYAN}${BOLD}Choose an option:${RESET}\n\n"
-        printf "   ${GREEN}a)${RESET} Install New Theme.\n"
-        printf "   ${GREEN}b)${RESET} Apply/Change Current Theme\n"
+        printf "${GREEN}   a)${RESET} Install New Theme Package\n"
+        printf "${GREEN}   b)${RESET} Apply / Change Installed Theme\n"
         echo
-        printf "   ${RED}m)${RESET} Back to Main Menu\n\n"
+        printf "${RED}   m)${RESET} Back to Main Menu\n\n"
 
         printf "${YELLOW}Enter choice (a/b/m):${RESET} "
         read -r opt
@@ -338,13 +304,13 @@ theme_management_menu() {
             a|A) theme_install_step ;;
             b|B) theme_apply_step ;;
             m|M) return ;;
-            *)   warn "Invalid option. Try again." ;;
+            *) warn "Invalid option. Try again." ;;
         esac
     done
 }
 
 # ==========================================================
-# STEP 3 — RESTORE SYSTEM TO PRE-PLYMOUTH STATE
+# Restore system to pre-Plymouth state
 # ==========================================================
 restore_step() {
     section "STEP 3 — Restore System"
@@ -353,40 +319,28 @@ restore_step() {
     mk=$(ls -1t "$BACKUP_DIR"/mkinitcpio.conf.bak_* 2>/dev/null | head -n1 || true)
     gr=$(ls -1t "$BACKUP_DIR"/grub.bak_* 2>/dev/null | head -n1 || true)
 
-    [[ -z "$mk" || -z "$gr" ]] && error "No backups found in $BACKUP_DIR — cannot restore."
+    [[ -z "$mk" || -z "$gr" ]] && error "No backups found."
 
     local pkgs
     pkgs=$(pacman -Qq | grep '^plymouth' || true)
 
-    if [[ -n "$pkgs" ]]; then
-        warn "Removing all Plymouth-related packages…"
-        sudo pacman -Rns --noconfirm $pkgs
-    else
-        warn "No Plymouth packages installed. Skipping removal."
-    fi
+    [[ -n "$pkgs" ]] && sudo pacman -Rns --noconfirm $pkgs
 
-    warn "Restoring /etc/mkinitcpio.conf from backup."
     sudo cp "$mk" /etc/mkinitcpio.conf
-
-    warn "Restoring /etc/default/grub from backup."
     sudo cp "$gr" /etc/default/grub
 
-    info "Rebuilding initramfs…"
     sudo mkinitcpio -P
-
-    info "Regenerating GRUB config…"
     sudo grub-mkconfig -o /boot/grub/grub.cfg
 
-    ok "System restored to pre-Plymouth state."
+    ok "System restored."
 }
 
 # ==========================================================
-# MAIN MENU — NO SUDO HERE
+# MAIN MENU
 # ==========================================================
 while true; do
     section "Plymouth Wizard — Main Menu"
 
-    printf "${CYAN}${BOLD}Choose an action:${RESET}\n\n"
     printf "${GREEN} 1)${RESET} Install & Activate Plymouth\n"
     printf "${GREEN} 2)${RESET} Theme Management\n"
     printf "${GREEN} 3)${RESET} Restore System\n"
@@ -400,7 +354,7 @@ while true; do
         1) install_plymouth_step ;;
         2) theme_management_menu ;;
         3) restore_step ;;
-        4) info "Exiting. Goodbye!"; exit 0 ;;
+        4) info "Goodbye!"; exit 0 ;;
         *) warn "Invalid option. Try again." ;;
     esac
 done
