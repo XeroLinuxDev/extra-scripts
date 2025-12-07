@@ -89,7 +89,7 @@ print_indexed_columns() {
 # Append flags to existing GRUB line (NEVER modify anything else)
 # ==========================================================
 append_kernel_flags() {
-    sudo sed -i 's/^\(GRUB_CMDLINE_LINUX_DEFAULT="[^"]*\)"/\1 splash rd.udev.log_priority=3 vt.global_cursor_default=0"/' /etc/default/grub
+    sed -i "/^GRUB_CMDLINE_LINUX_DEFAULT=/s/'$/ splash rd.udev.log_priority=3 vt.global_cursor_default=0'/" /etc/default/grub
     echo
     ok "GRUB updated."
 }
