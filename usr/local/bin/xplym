@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # ==========================================================
-#   Arch Linux Plymouth Wizard – Final Interactive Edition
-#   • No sudo required on launch
-#   • Human-readable package descriptions
-#   • Human-readable installed theme names (Name=)
-#   • Bulletproof .plymouth detection
+#   Arch Linux Plymouth Wizard – Humanized Edition
+#   • No sudo on startup
+#   • Human-friendly package names (computed from pkg name)
+#   • Real installed theme detection using .plymouth files
 # ==========================================================
 
-set -euo pipefail
+set -euo pipefail && clear
 
 # =========================[ COLORS ]========================
 RESET="\e[0m"
@@ -42,7 +41,30 @@ BACKUP_DIR="/etc/plymouth-backups"
 TIME_STAMP="$(date +%Y%m%d_%H%M%S)"
 
 # ==========================================================
-# BACKUP CONFIG FILES
+# Humanize package names (plymouth-theme-arch-charge-git → Arch Charge)
+# ==========================================================
+humanize_pkg_name() {
+    local pkg="$1"
+
+    # Remove prefix and suffix
+    local name="${pkg#plymouth-theme-}"   # remove prefix
+    name="${name%-git}"                   # remove -git if present
+
+    # Replace separators with spaces
+    name="${name//-/ }"
+    name="${name//_/ }"
+
+    # Capitalize each word
+    local final=""
+    for word in $name; do
+        final+="$(tr '[:lower:]' '[:upper:]' <<< "${word:0:1}")${word:1} "
+    done
+
+    echo "${final::-1}"
+}
+
+# ==========================================================
+# BACKUP BOTH CONFIG FILES
 # ==========================================================
 backup_configs() {
     section "BACKUP — Saving System Boot Configs"
@@ -56,41 +78,43 @@ backup_configs() {
 }
 
 # ==========================================================
-# FIX HOOKS: Insert plymouth right after udev
+# Insert plymouth HOOK after udev
 # ==========================================================
 fix_mkinitcpio_hooks() {
     info "Updating mkinitcpio HOOKS…"
 
     local file="/etc/mkinitcpio.conf"
     local hooks_line=$(grep "^HOOKS=" "$file" || true)
-    [[ -z "$hooks_line" ]] && error "Couldn't locate HOOKS= line in $file"
+    [[ -z "$hooks_line" ]] && error "HOOKS= line not found."
 
-    local raw_hooks=$(echo "$hooks_line" | sed -E 's/^HOOKS=\((.*)\)/\1/')
-    IFS=' ' read -r -a hooks <<< "$raw_hooks"
+    local raw="${hooks_line#HOOKS=(}"
+    raw="${raw%)}"
 
-    # Remove old instances of plymouth
+    IFS=' ' read -r -a hooks <<< "$raw"
+
     local cleaned=()
     for h in "${hooks[@]}"; do
         [[ "$h" != "plymouth" ]] && cleaned+=("$h")
     done
 
-    local new=()
+    local final=()
     local inserted=false
 
     for h in "${cleaned[@]}"; do
-        new+=("$h")
+        final+=("$h")
         if [[ "$h" == "udev" ]]; then
-            new+=("plymouth")
+            final+=("plymouth")
             inserted=true
         fi
     done
 
     if ! $inserted; then
-        warn "udev hook missing — prepending udev + plymouth"
-        new=("udev" "plymouth" "${cleaned[@]}")
+        warn "udev not found — prepending udev + plymouth"
+        final=("udev" "plymouth" "${cleaned[@]}")
     fi
 
-    sudo sed -i "s|^HOOKS=.*|HOOKS=(${new[*]})|" "$file"
+    sudo sed -i "s|^HOOKS=.*|HOOKS=(${final[*]})|" "$file"
+
     ok "HOOKS updated."
 }
 
@@ -98,48 +122,46 @@ fix_mkinitcpio_hooks() {
 # SAFE GRUB FLAG APPENDING
 # ==========================================================
 append_kernel_flags() {
-    local add_flags=("quiet" "splash" "loglevel=3" "rd.udev.log_priority=3" "vt.global_cursor_default=0")
-
-    local current=$(grep '^GRUB_CMDLINE_LINUX_DEFAULT=' /etc/default/grub | sed 's/^GRUB_CMDLINE_LINUX_DEFAULT="//;s/"$//')
+    local flags=("quiet" "splash" "loglevel=3" "rd.udev.log_priority=3" "vt.global_cursor_default=0")
+    local current=$(grep '^GRUB_CMDLINE_LINUX_DEFAULT=' /etc/default/grub | sed 's/^.*="//;s/"$//')
     local new="$current"
 
-    for flag in "${add_flags[@]}"; do
-        [[ "$current" != *"$flag"* ]] && new="$new $flag"
+    for f in "${flags[@]}"; do
+        [[ "$current" != *"$f"* ]] && new="$new $f"
     done
 
-    new=$(echo "$new" | xargs)  # trim spaces
+    new=$(echo "$new" | xargs)
 
     sudo sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"$new\"|" /etc/default/grub
+
     ok "GRUB flags updated."
 }
 
 # ==========================================================
-# SHOW HUMAN-READABLE PACKAGE LIST FROM PACMAN
+# GET PACKAGE LIST (HUMANIZED)
 # ==========================================================
 get_theme_pkg_list() {
     THEMES_PKGS=()
-    THEMES_DESC=()
+    THEMES_NAMES=()
 
     while IFS= read -r line; do
-        pkg=$(echo "$line" | cut -d'/' -f2 | cut -d' ' -f1)
-        desc=$(pacman -Si "$pkg" 2>/dev/null | grep -m1 "^Description" | cut -d':' -f2- | sed 's/^ *//')
-
-        [[ -z "$desc" ]] && desc="$pkg"
+        local pkg=$(echo "$line" | cut -d'/' -f2 | cut -d' ' -f1)
+        local readable=$(humanize_pkg_name "$pkg")
 
         THEMES_PKGS+=("$pkg")
-        THEMES_DESC+=("$desc")
+        THEMES_NAMES+=("$readable")
     done < <(pacman -Ss plymouth-theme | grep -E '^[^/]+/plymouth-theme')
 }
 
 # ==========================================================
-# SMART THEME DETECTION USING .plymouth FILES
+# INSTALLED THEMES — REAL DETECTION USING .PLYMOUTH
 # ==========================================================
 select_theme_from_fs() {
     local plyfiles=()
     local ids=()
     local names=()
 
-    mapfile -t plyfiles < <(find /usr/share/plymouth/themes -type f -name "*.plymouth")
+    mapfile -t plyfiles < <(find /usr/share/plymouth/themes -type f -name '*.plymouth')
 
     (( ${#plyfiles[@]} == 0 )) && error "No installed themes found."
 
@@ -154,7 +176,7 @@ select_theme_from_fs() {
         names+=("$name")
     done
 
-    printf "${BOLD}Installed Themes:${RESET}\n"
+    printf "${BOLD}Installed Plymouth Themes:${RESET}\n"
     for i in "${!names[@]}"; do
         printf "${BLUE} [%d]${RESET} %s\n" "$i" "${names[$i]}"
     done
@@ -166,13 +188,12 @@ select_theme_from_fs() {
 }
 
 # ==========================================================
-# STEP 1 – INSTALL PLYMOUTH
+# STEP 1 — INSTALL PLYMOUTH
 # ==========================================================
 install_plymouth_step() {
     section "STEP 1 — Install Plymouth"
 
     backup_configs
-
     sudo pacman -Sy --needed --noconfirm plymouth plymouth-kcm
 
     fix_mkinitcpio_hooks
@@ -184,22 +205,22 @@ install_plymouth_step() {
     sudo mkinitcpio -P
     sudo grub-mkconfig -o /boot/grub/grub.cfg
 
-    ok "Plymouth installation complete."
+    ok "Plymouth installed and configured."
 }
 
 # ==========================================================
-# STEP 2 – INSTALL & APPLY THEME
+# STEP 2 — INSTALL & APPLY THEME
 # ==========================================================
 theme_selection_step() {
     section "STEP 2 — Install & Apply Theme"
 
     get_theme_pkg_list
 
-    (( ${#THEMES_PKGS[@]} == 0 )) && error "No theme packages available."
+    (( ${#THEMES_PKGS[@]} == 0 )) && error "No theme packages found."
 
     printf "${BOLD}Available Theme Packages:${RESET}\n"
     for i in "${!THEMES_PKGS[@]}"; do
-        printf "${BLUE} [%d]${RESET} %s\n" "$i" "${THEMES_DESC[$i]}"
+        printf "${BLUE} [%d]${RESET} %s\n" "$i" "${THEMES_NAMES[$i]}"
     done
 
     printf "\n${YELLOW}Choose package to install:${RESET} "
@@ -208,7 +229,7 @@ theme_selection_step() {
     pkg="${THEMES_PKGS[$idx]}"
     sudo pacman -Sy --needed --noconfirm "$pkg"
 
-    info "Scanning installed themes..."
+    info "Detecting installed themes..."
     select_theme_from_fs
 
     info "Applying theme: $THEME_NAME"
@@ -218,7 +239,7 @@ theme_selection_step() {
 }
 
 # ==========================================================
-# STEP 3 – RESTORE SYSTEM TO PRE-PLYMOUTH STATE
+# STEP 3 — RESTORE SYSTEM
 # ==========================================================
 restore_step() {
     section "STEP 3 — Restore System"
@@ -237,7 +258,7 @@ restore_step() {
     sudo mkinitcpio -P
     sudo grub-mkconfig -o /boot/grub/grub.cfg
 
-    ok "System restored to pre-Plymouth state."
+    ok "System restored."
 }
 
 # ==========================================================
