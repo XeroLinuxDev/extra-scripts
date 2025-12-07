@@ -89,8 +89,6 @@ print_indexed_columns() {
 # Append flags to existing GRUB line (NEVER modify anything else)
 # ==========================================================
 append_kernel_flags() {
-    echo
-    info "Appending kernel flags to GRUB..."
     sudo sed -i 's/^\(GRUB_CMDLINE_LINUX_DEFAULT="[^"]*\)"/\1 splash rd.udev.log_priority=3 vt.global_cursor_default=0"/' /etc/default/grub
     echo
     ok "GRUB updated."
@@ -115,8 +113,6 @@ backup_configs() {
 # Fix mkinitcpio HOOKS
 # ==========================================================
 fix_mkinitcpio_hooks() {
-    echo
-    info "Updating mkinitcpio HOOKS…"
 
     local file="/etc/mkinitcpio.conf"
     local hooks_line raw
@@ -217,18 +213,17 @@ install_plymouth_step() {
 
     info "Installing plymouth & plymouth-kcm…"
     sudo pacman -Sy --needed --noconfirm plymouth plymouth-kcm
-
-    info "Fixing mkinitcpio HOOKS…"
     echo
+    info "Fixing mkinitcpio HOOKS…"
     fix_mkinitcpio_hooks
 
     info "Appending kernel flags to GRUB…"
     echo
     append_kernel_flags
-
+    echo
     info "Rebuilding mkinitcpio…"
     sudo mkinitcpio -P
-
+    echo
     info "Regenerating GRUB config…"
     sudo grub-mkconfig -o /boot/grub/grub.cfg
 
