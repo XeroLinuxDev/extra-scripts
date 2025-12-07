@@ -89,8 +89,7 @@ print_indexed_columns() {
 # Append flags to existing GRUB line (NEVER modify anything else)
 # ==========================================================
 append_kernel_flags() {
-    sed -i "/^GRUB_CMDLINE_LINUX_DEFAULT=/s/'$/ splash rd.udev.log_priority=3 vt.global_cursor_default=0'/" /etc/default/grub
-    echo
+    sudo sed -i "/^GRUB_CMDLINE_LINUX_DEFAULT=/s/'$/ splash rd.udev.log_priority=3 vt.global_cursor_default=0'/" /etc/default/grub
     ok "GRUB updated."
 }
 
@@ -326,7 +325,7 @@ restore_step() {
     local pkgs
     pkgs=$(pacman -Qq | grep '^plymouth' || true)
     [[ -n "$pkgs" ]] && sudo pacman -Rns --noconfirm $pkgs
-
+    echo
     info "Restoring mkinitcpio.conf…"
     sudo cp "$mk" /etc/mkinitcpio.conf
 
@@ -335,10 +334,10 @@ restore_step() {
 
     info "Rebuilding mkinitcpio…"
     sudo mkinitcpio -P
-
+    echo
     info "Regenerating GRUB…"
     sudo grub-mkconfig -o /boot/grub/grub.cfg
-
+    echo
     ok "System restored."
 
     printf "${YELLOW}Press Enter to return to Main Menu...${RESET}"
@@ -352,9 +351,9 @@ while true; do
     clear
     section "PLYMOUTH WIZARD — MAIN MENU"
 
-    printf "${GREEN} 1)${RESET} Install & Activate Plymouth\n"
-    printf "${GREEN} 2)${RESET} Theme Management\n"
-    printf "${GREEN} 3)${RESET} Restore System\n\n"
+    printf "${GREEN} 1)${RESET} Install & Activate Plymouth.\n"
+    printf "${GREEN} 2)${RESET} Plymouth Theme Managemen System.\n"
+    printf "${GREEN} 3)${RESET} Restore System to Pre-Plymouth State.\n\n"
     printf "${RED} 4)${RESET} Exit Wizard\n\n"
 
     printf "${YELLOW}Choose option:${RESET} "
