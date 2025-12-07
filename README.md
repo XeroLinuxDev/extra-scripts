@@ -8,4 +8,5 @@ This is a collection of custom scripts included on every XeroLinux release. Belo
 - **pacup**      : Update Pacman.conf
 - **rpipe**      : Restart PipeWire
 - **smbfix**     : Fix Samba Sharing
-- **rddav**      : Set up Real-Debrid WebDav
+- **rddav**      : Set up Real-Debrid
+- **opr-drv**    : Set up OpenRazr Driver
