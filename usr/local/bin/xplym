@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==========================================================
-#   Arch Linux Plymouth Wizard (Final Release)
+#   Arch Linux Plymouth Wizard (Final, No-Sudo-On-Start)
 #   Install → Theme → Restore → Exit
 # ==========================================================
 
@@ -44,14 +44,14 @@ TIME_STAMP="$(date +%Y%m%d_%H%M%S)"
 backup_configs() {
     section "BACKUP — Saving Current Boot Configs"
 
-    # ensure backup directory exists
+    local mk_src="/etc/mkinitcpio.conf"
+    local grub_src="/etc/default/grub"
+
+    # ensure backup dir exists (this is the *first* sudo use in option 1)
     if [[ ! -d "$BACKUP_DIR" ]]; then
         info "Creating backup directory: $BACKUP_DIR"
         sudo mkdir -p "$BACKUP_DIR"
     fi
-
-    local mk_src="/etc/mkinitcpio.conf"
-    local grub_src="/etc/default/grub"
 
     local mk_bak="$BACKUP_DIR/mkinitcpio.conf.bak_$TIME_STAMP"
     local grub_bak="$BACKUP_DIR/grub.bak_$TIME_STAMP"
@@ -59,7 +59,7 @@ backup_configs() {
     info "Backing up mkinitcpio.conf → $mk_bak"
     sudo cp "$mk_src" "$mk_bak"
 
-    info "Backing up grub → $grub_bak"
+    info "Backing up /etc/default/grub → $grub_bak"
     sudo cp "$grub_src" "$grub_bak"
 
     ok "Backup completed successfully."
@@ -73,10 +73,10 @@ fix_mkinitcpio_hooks() {
 
     local file="/etc/mkinitcpio.conf"
     local hooks_line
-    hooks_line=$(grep "^HOOKS=" "$file")
+    hooks_line=$(grep "^HOOKS=" "$file" || true)
 
     if [[ -z "$hooks_line" ]]; then
-        error "HOOKS= line not found in mkinitcpio.conf"
+        error "HOOKS= line not found in $file"
     fi
 
     local hooks_raw
@@ -84,13 +84,14 @@ fix_mkinitcpio_hooks() {
 
     IFS=' ' read -r -a hooks <<< "$hooks_raw"
 
-    new_hooks=()
+    # remove existing plymouth if present
+    local new_hooks=()
     for h in "${hooks[@]}"; do
         [[ "$h" != "plymouth" ]] && new_hooks+=("$h")
     done
 
-    final_hooks=()
-    inserted=false
+    local final_hooks=()
+    local inserted=false
 
     for h in "${new_hooks[@]}"; do
         final_hooks+=("$h")
@@ -101,11 +102,11 @@ fix_mkinitcpio_hooks() {
     done
 
     if [[ "$inserted" == false ]]; then
-        warn "'udev' not found — adding it with plymouth at the beginning"
+        warn "'udev' not found — prepending udev + plymouth"
         final_hooks=("udev" "plymouth" "${new_hooks[@]}")
     fi
 
-    final_hooks_str="${final_hooks[*]}"
+    local final_hooks_str="${final_hooks[*]}"
 
     info "New HOOKS=($final_hooks_str)"
     sudo sed -i "s|^HOOKS=.*|HOOKS=($final_hooks_str)|" "$file"
@@ -131,7 +132,7 @@ append_kernel_flags() {
         fi
     done
 
-    new=$(echo "$new" | xargs)
+    new="$(echo "$new" | xargs)"
 
     info "Appending required GRUB flags safely…"
     sudo sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"$new\"|" /etc/default/grub
@@ -141,7 +142,7 @@ append_kernel_flags() {
 }
 
 # ==========================================================
-# THEME DETECTION + INSTALLATION
+# THEME DETECTION + LISTING
 # ==========================================================
 get_theme_list() {
     mapfile -t THEMES < <(
@@ -157,14 +158,17 @@ detect_installed_theme_name() {
     local raw="${pkg/plymouth-theme-/}"
 
     local path
-    path=$(find /usr/share/plymouth/themes -maxdepth 1 -type d -iname "$raw*" | head -n 1)
+    path=$(find /usr/share/plymouth/themes -maxdepth 1 -type d -iname "$raw*" | head -n 1 || true)
 
-    [[ -z "$path" ]] && error "Cannot locate theme directory for: $pkg"
+    if [[ -z "$path" ]]; then
+        error "Cannot locate theme directory for: $pkg"
+    fi
 
     THEME_NAME="$(basename "$path")"
 
-    [[ ! -f "/usr/share/plymouth/themes/$THEME_NAME/$THEME_NAME.plymouth" ]] \
-        && error "Theme file missing: $THEME_NAME/$THEME_NAME.plymouth"
+    if [[ ! -f "/usr/share/plymouth/themes/$THEME_NAME/$THEME_NAME.plymouth" ]]; then
+        error "Theme file missing: /usr/share/plymouth/themes/$THEME_NAME/$THEME_NAME.plymouth"
+    fi
 }
 
 # ==========================================================
@@ -175,27 +179,27 @@ install_plymouth_step() {
 
     backup_configs
 
-    info "Installing Plymouth packages…"
+    info "Installing Plymouth core packages…"
     sudo pacman -Sy --needed --noconfirm plymouth plymouth-kcm
 
     fix_mkinitcpio_hooks
 
-    printf "${YELLOW}Add recommended silent boot flags? [Y/n] ${RESET}"
+    printf "${YELLOW}Append silent-boot flags (quiet splash loglevel=3 rd.udev.log_priority=3 vt.global_cursor_default=0)? [Y/n] ${RESET}"
     read -r yn
 
-    if [[ -z "$yn" || "$yn" =~ ^[Yy] ]]; then
+    if [[ -z "${yn:-}" || "$yn" =~ ^[Yy]$ ]]; then
         append_kernel_flags
     else
-        warn "Skipping GRUB flag modifications."
+        warn "Skipping GRUB flag changes."
     fi
 
-    info "Rebuilding initramfs…"
+    info "Rebuilding initramfs (mkinitcpio -P)…"
     sudo mkinitcpio -P
 
-    info "Updating GRUB config…"
+    info "Regenerating GRUB config…"
     sudo grub-mkconfig -o /boot/grub/grub.cfg
 
-    ok "Plymouth installed and active!"
+    ok "Plymouth installed and enabled. Reboot to see it in action."
 }
 
 # ==========================================================
@@ -205,7 +209,7 @@ theme_selection_step() {
     section "STEP 2 — Plymouth Theme Selection"
 
     get_theme_list
-    [[ ${#THEMES[@]} -gt 0 ]] || error "No Plymouth themes found."
+    [[ ${#THEMES[@]} -gt 0 ]] || error "No plymouth-theme packages found in repositories."
 
     printf "${BOLD}Available Plymouth Themes:${RESET}\n"
     for i in "${!THEMES[@]}"; do
@@ -215,13 +219,13 @@ theme_selection_step() {
     printf "\n${YELLOW}Choose theme number:${RESET} "
     read -r choice
 
-    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice >= ${#THEMES[@]} )); then
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || (( choice < 0 || choice >= ${#THEMES[@]} )); then
         error "Invalid selection."
     fi
 
     local pkg="${THEMES[$choice]}"
 
-    info "Installing theme: $pkg"
+    info "Installing theme package: $pkg"
     sudo pacman -Sy --needed --noconfirm "$pkg"
 
     detect_installed_theme_name "$pkg"
@@ -229,53 +233,57 @@ theme_selection_step() {
     info "Activating theme: $THEME_NAME"
     sudo plymouth-set-default-theme -R "$THEME_NAME"
 
-    ok "Theme installed and activated. Reboot to see it."
+    ok "Theme '$THEME_NAME' applied. Reboot to see it."
 }
 
 # ==========================================================
-# STEP 3 — RESTORE SYSTEM (REMOVE PLYMOUTH)
+# STEP 3 — RESTORE SYSTEM (REMOVE PLYMOUTH COMPLETELY)
 # ==========================================================
 restore_step() {
     section "STEP 3 — Restore System to Pre-Plymouth"
 
-    local mk latest_grub
-    mk=$(ls -1t $BACKUP_DIR/mkinitcpio.conf.bak_* | head -n 1 || true)
-    latest_grub=$(ls -1t $BACKUP_DIR/grub.bak_* | head -n 1 || true)
+    local mk_backup latest_grub_backup
 
-    [[ -z "$mk" || -z "$latest_grub" ]] && error "No backup files available — cannot restore!"
+    mk_backup=$(ls -1t "$BACKUP_DIR"/mkinitcpio.conf.bak_* 2>/dev/null | head -n 1 || true)
+    latest_grub_backup=$(ls -1t "$BACKUP_DIR"/grub.bak_* 2>/dev/null | head -n 1 || true)
+
+    if [[ -z "$mk_backup" || -z "$latest_grub_backup" ]]; then
+        error "No backups found in $BACKUP_DIR. Cannot restore."
+    fi
 
     info "Detecting installed Plymouth-related packages…"
+    local installed_pkgs
     installed_pkgs=$(pacman -Qq | grep '^plymouth' || true)
 
     if [[ -n "$installed_pkgs" ]]; then
-        warn "Removing all Plymouth packages…"
+        warn "Removing all Plymouth-related packages…"
         sudo pacman -Rns --noconfirm $installed_pkgs
     else
-        warn "No Plymouth packages found — skipping uninstall."
+        warn "No Plymouth packages detected. Skipping removal."
     fi
 
-    warn "Restoring /etc/mkinitcpio.conf → $mk"
-    sudo cp "$mk" /etc/mkinitcpio.conf
+    warn "Restoring /etc/mkinitcpio.conf from: $mk_backup"
+    sudo cp "$mk_backup" /etc/mkinitcpio.conf
 
-    warn "Restoring /etc/default/grub → $latest_grub"
-    sudo cp "$latest_grub" /etc/default/grub
+    warn "Restoring /etc/default/grub from: $latest_grub_backup"
+    sudo cp "$latest_grub_backup" /etc/default/grub
 
-    info "Rebuilding initramfs…"
+    info "Rebuilding initramfs (mkinitcpio -P)…"
     sudo mkinitcpio -P
 
-    info "Rebuilding GRUB configuration…"
+    info "Regenerating GRUB configuration…"
     sudo grub-mkconfig -o /boot/grub/grub.cfg
 
-    ok "System fully restored!"
+    ok "System restored to pre-Plymouth state."
 }
 
 # ==========================================================
-# MAIN MENU
+# MAIN MENU (NO SUDO HERE AT ALL)
 # ==========================================================
 while true; do
     section "Plymouth Wizard – Main Menu"
 
-    printf "${CYAN}${BOLD}Select an option:${RESET}\n\n"
+    printf "${CYAN}${BOLD}Select an action:${RESET}\n\n"
     printf "${GREEN} 1)${RESET} Install & Activate Plymouth\n"
     printf "${GREEN} 2)${RESET} Install & Apply Plymouth Theme\n"
     printf "${GREEN} 3)${RESET} Restore & Remove Plymouth Completely\n"
@@ -291,10 +299,12 @@ while true; do
         3) restore_step ;;
         4)
             echo
-            info "Exiting wizard — goodbye!"
-            exit 0 ;;
+            info "Exiting wizard. Goodbye!"
+            exit 0
+            ;;
         *)
             echo
-            warn "Invalid option — please try again." ;;
+            warn "Invalid option, please try again."
+            ;;
     esac
 done
