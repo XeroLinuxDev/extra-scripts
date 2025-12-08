@@ -1,7 +1,7 @@
 # Maintainer: DarkXero <info@techxero.com>
 pkgname=extra-scripts
 _destname1="/"
-pkgver=2.5
+pkgver=2.6
 pkgrel=1
 pkgdesc="Some Scripted Tools"
 arch=('any')

@@ -291,17 +291,12 @@ theme_management_menu() {
         clear
         section "THEME MANAGEMENT"
 
-        printf "${YELLOW}Some Plymouth themes include preview images provided by the\n"
-        printf "upstream author. You can view available previews at the link\n"
-        printf "below (CTRL+Click to open):\n\n"
-
-        printf "    ▶ ${MAGENTA}${BOLD}https://github.com/adi1090x/plymouth-themes#previews${RESET}\n\n"
-
-        printf "${YELLOW}Others do NOT include previews, so installing and testing\n"
-        printf "them directly is the only reliable way to see how they look.\n\n${RESET}"
+        printf "💡 ${YELLOW}Some themes include preview images.\n"
+        printf "   Others do not. Only way is to apply & test.\n\n"
 
         printf "${GREEN}   a)${RESET} Install a New Plymouth Theme.\n"
-        printf "${GREEN}   b)${RESET} Apply/Change Current Plymouth Theme.\n\n"
+        printf "${GREEN}   b)${RESET} Apply/Change Current Plymouth Theme.\n"
+        printf "${GREEN}   p)${RESET} Open Theme Preview Page (Default Browser).\n\n"
         printf "${RED}   m)${RESET} Back to Main Menu\n\n"
 
         printf "${YELLOW}Choose option:${RESET} "
@@ -310,6 +305,7 @@ theme_management_menu() {
         case "$opt" in
             a|A) theme_install_step ;;
             b|B) theme_apply_step ;;
+            p|P) xdg-open "https://github.com/adi1090x/plymouth-themes#previews" >/dev/null 2>&1 & ;;
             m|M) return ;;
             *) warn "Invalid selection." ;;
         esac
@@ -358,6 +354,12 @@ restore_step() {
 while true; do
     clear
     section "PLYMOUTH WIZARD — MAIN MENU"
+
+    printf "💡 ${YELLOW}Plymouth provides a Cool/G33ky boot animation.\n\n"
+    printf "►  Use this wizard to install, manage themes.\n"
+    printf "   Or restore your system by undoing all changes.\n\n${RESET}"
+
+    printf "${MAGENTA}Greetings ${RED}$USER${MAGENTA}. The Grid awaits your command :${RESET}\n\n"
 
     printf "${GREEN} 1)${RESET} Install & Activate Plymouth.\n"
     printf "${GREEN} 2)${RESET} Plymouth Theme Management System.\n"
