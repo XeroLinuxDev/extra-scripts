@@ -98,7 +98,6 @@ append_kernel_flags() {
 # Backup configurations
 # ==========================================================
 backup_configs() {
-    echo
     info "Creating backups of mkinitcpio.conf and grub…"
 
     sudo mkdir -p "$BACKUP_DIR"
@@ -211,18 +210,18 @@ install_plymouth_step() {
     backup_configs
 
     info "Installing plymouth & plymouth-kcm…"
-    sudo pacman -Sy --needed --noconfirm plymouth plymouth-kcm
-    echo
+    sudo pacman -Sy --needed --noconfirm plymouth
+
     info "Fixing mkinitcpio HOOKS…"
     fix_mkinitcpio_hooks
 
     info "Appending kernel flags to GRUB…"
-    echo
     append_kernel_flags
     echo
+
     info "Rebuilding mkinitcpio…"
     sudo mkinitcpio -P
-    echo
+
     info "Regenerating GRUB config…"
     sudo grub-mkconfig -o /boot/grub/grub.cfg
 
