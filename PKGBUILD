@@ -2,7 +2,7 @@
 pkgname=extra-scripts
 _destname1="/"
 pkgver=2.6
-pkgrel=1
+pkgrel=2
 pkgdesc="Some Scripted Tools"
 arch=('any')
 url="https://github.com/XeroLinuxDev"
