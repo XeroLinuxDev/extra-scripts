@@ -68,12 +68,12 @@ case "$choice" in
         git config --global credential.helper store
 
         echo
-        echo -e "${GREEN}>>> Removing previous credentials file${RESET}"
+        echo -e "${GREEN}>>> Removing previous plaintext credentials file${RESET}"
         rm -f ~/.git-credentials
 
         echo
         echo -e "${GREEN}Installation complete!${RESET}"
-        echo -e "Next time you push, Git will save your token to:"
+        echo -e "Next time you push, Git will save your token permanently in:"
         echo -e "${YELLOW}~/.git-credentials${RESET}"
         echo
         ;;
@@ -92,12 +92,8 @@ case "$choice" in
         rm -f ~/.git-credentials
 
         echo
-        echo -e "${RED}>>> Clearing Git RAM credential cache${RESET}"
-        git credential-cache exit >/dev/null 2>&1
-
-        echo
         echo -e "${GREEN}Cleanup complete.${RESET}"
-        echo "Your system no longer stores any Git credentials."
+        echo "Your Git system is now credential-free."
         echo
         ;;
 
