@@ -10,3 +10,4 @@ This is a collection of custom scripts included on every XeroLinux release. Belo
 - **smbfix**     : Fix Samba Sharing
 - **rddav**      : Set up Real-Debrid
 - **opr-drv**    : Set up OpenRazr Driver
+- **getcider**   : Install Cider
