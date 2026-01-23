@@ -2,12 +2,11 @@
 pkgname=extra-scripts
 _destname1="/"
 pkgver=2.7
-pkgrel=1
+pkgrel=3
 pkgdesc="Some Scripted Tools"
 arch=('any')
 url="https://github.com/XeroLinuxDev"
 license=('GPL3')
-depends=('scx-scheds' 'scx-tools')
 makedepends=('git')
 conflicts=('xero-fix-tools-dev')
 provides=("${pkgname}")
