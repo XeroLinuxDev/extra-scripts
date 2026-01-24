@@ -67,12 +67,8 @@ set_parallel_downloads() {
         echo
         read -p "Press Enter to continue..."
         if [ -n "$SUDO_USER" ]; then
-          clear
-          sudo -K
-          exec sudo -u "$SUDO_USER" xero-cli -m
         else
-          clear
-          exec xero-cli -m
+          exit 0
         fi
     else
         echo -e "${RED}Failed to update ParallelDownloads setting${NC}"
@@ -80,10 +76,10 @@ set_parallel_downloads() {
         if [ -n "$SUDO_USER" ]; then
           clear
           sudo -K
-          exec sudo -u "$SUDO_USER" xero-cli -m
+          exec sudo -u "$SUDO_USER"
         else
           clear
-          exec xero-cli -m
+          exit 0
         fi
     fi
 }
@@ -123,10 +119,10 @@ while true; do
             if [ -n "$SUDO_USER" ]; then
               clear
               sudo -K
-              exec sudo -u "$SUDO_USER" xero-cli -m
+              exec sudo -u "$SUDO_USER"
             else
               clear
-              exec xero-cli -m
+              exit 0
             fi
             ;;
         3)
@@ -135,10 +131,10 @@ while true; do
             if [ -n "$SUDO_USER" ]; then
               clear
               sudo -K
-              exec sudo -u "$SUDO_USER" xero-cli -m
+              exec sudo -u "$SUDO_USER"
             else
               clear
-              exec xero-cli -m
+              exit 0
             fi
             ;;
         *)
@@ -148,10 +144,10 @@ while true; do
             if [ -n "$SUDO_USER" ]; then
               clear
               sudo -K
-              exec sudo -u "$SUDO_USER" xero-cli -m
+              exec sudo -u "$SUDO_USER"
             else
               clear
-              exec xero-cli -m
+              exit 0
             fi
             ;;
     esac
