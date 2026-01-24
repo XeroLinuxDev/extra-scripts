@@ -10,11 +10,9 @@ NC='\033[0m' # No Color
 # Function to cleanup and exit
 cleanup_and_exit() {
     if [ -n "$SUDO_USER" ]; then
-        clear
         sudo -K
         exec sudo -u "$SUDO_USER" bash
     else
-        clear
         exit 0
     fi
 }
@@ -77,11 +75,9 @@ set_parallel_downloads() {
         echo
         echo -e "${YELLOW}New configuration:${NC} $(grep "ParallelDownloads" /etc/pacman.conf)"
         echo
-        read -p "Press Enter to continue..."
         cleanup_and_exit
     else
         echo -e "${RED}Failed to update ParallelDownloads setting${NC}"
-        read -p "Press Enter to continue..."
         cleanup_and_exit
     fi
 }
@@ -117,7 +113,6 @@ while true; do
         2)
             echo
             restore_backup
-            read -p "Press Enter to continue..."
             cleanup_and_exit
             ;;
         3)
