@@ -7,6 +7,18 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Function to cleanup and exit
+cleanup_and_exit() {
+    if [ -n "$SUDO_USER" ]; then
+        clear
+        sudo -K
+        exec sudo -u "$SUDO_USER" bash
+    else
+        clear
+        exit 0
+    fi
+}
+
 # Function to restore backup
 restore_backup() {
     if [ -f "/etc/pacman.conf.backup" ]; then
@@ -66,26 +78,16 @@ set_parallel_downloads() {
         echo -e "${YELLOW}New configuration:${NC} $(grep "ParallelDownloads" /etc/pacman.conf)"
         echo
         read -p "Press Enter to continue..."
-        if [ -n "$SUDO_USER" ]; then
-        else
-          exit 0
-        fi
+        cleanup_and_exit
     else
         echo -e "${RED}Failed to update ParallelDownloads setting${NC}"
         read -p "Press Enter to continue..."
-        if [ -n "$SUDO_USER" ]; then
-          clear
-          sudo -K
-          exec sudo -u "$SUDO_USER"
-        else
-          clear
-          exit 0
-        fi
+        cleanup_and_exit
     fi
 }
 
 # Check if running with sudo/root permissions
-if [ "$EUID" -ne 0 ]; then 
+if [ "$EUID" -ne 0 ]; then
     echo -e "${RED}Error: This script needs to be run with sudo privileges${NC}"
     echo -e "Please run: ${YELLOW}sudo $0${NC}"
     exit 1
@@ -116,39 +118,17 @@ while true; do
             echo
             restore_backup
             read -p "Press Enter to continue..."
-            if [ -n "$SUDO_USER" ]; then
-              clear
-              sudo -K
-              exec sudo -u "$SUDO_USER"
-            else
-              clear
-              exit 0
-            fi
+            cleanup_and_exit
             ;;
         3)
             echo
             echo -e "${BLUE}Returning to main menu...${NC}"
-            if [ -n "$SUDO_USER" ]; then
-              clear
-              sudo -K
-              exec sudo -u "$SUDO_USER"
-            else
-              clear
-              exit 0
-            fi
+            cleanup_and_exit
             ;;
         *)
             echo
             echo -e "${RED}Invalid choice${NC}"
             read -p "Press Enter to continue..."
-            if [ -n "$SUDO_USER" ]; then
-              clear
-              sudo -K
-              exec sudo -u "$SUDO_USER"
-            else
-              clear
-              exit 0
-            fi
             ;;
     esac
 done
